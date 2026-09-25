@@ -1,69 +1,164 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Wallet, TrendingUp, Target, Plus, CreditCard, Loader2 } from 'lucide-react'
+
+// استيراد المكونات الفرعية (سنقوم بإنشائها أو دمجها)
+import StatCard from './components/StatCard'
+import TransactionForm from './components/TransactionForm'
+import AccountForm from './components/AccountForm'
+import GoalForm from './components/GoalForm'
+import TransactionList from './components/TransactionList'
+import GoalList from './components/GoalList'
+
+export default function Dashboard() {
+  const [accounts, setAccounts] = useState<any[]>([])
+  const [transactions, setTransactions] = useState<any[]>([])
+  const [goals, setGoals] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // دالة جلب البيانات باستخدام useCallback لتحسين الأداء
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [accRes, txRes, goalRes] = await Promise.all([
+        supabase.from('accounts').select('*'),
+        supabase.from('transactions').select('*, accounts(name)').order('created_at', { ascending: false }).limit(10),
+        supabase.from('savings_goals').select('*')
+      ])
+
+      if (accRes.data) setAccounts(accRes.data)
+      if (txRes.data) setTransactions(txRes.data)
+      if (goalRes.data) setGoals(goalRes.data)
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // إضافة معاملة جديدة بطريقة احترافية مع Optimistic Update
+  const handleAddTransaction = async (formData: { amount: string; type: string; description: string; accountId: string }) => {
+    const { amount, type, description, accountId } = formData
+    if (!amount || !accountId) return
+
+    const numAmount = parseFloat(amount)
+    const selectedAcc = accounts.find(acc => acc.id === accountId)
+    if (!selectedAcc) return
+
+    let newBalance = Number(selectedAcc.balance)
+    if (type === 'income') {
+      newBalance += numAmount
+    } else {
+      newBalance -= numAmount
+    }
+
+    // تنفيذ التحديث في قاعدة البيانات
+    const { error: txError } = await supabase.from('transactions').insert([
+      { amount: numAmount, type, description, account_id: accountId }
+    ])
+
+    if (txError) {
+      alert('خطأ في إضافة المعاملة: ' + txError.message)
+      return
+    }
+
+    await supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId)
+    fetchData()
+  }
+
+  // إضافة حساب جديد
+  const handleAddAccount = async (formData: { name: string; balance: string }) => {
+    const { name, balance } = formData
+    if (!name) return
+
+    const { error } = await supabase.from('accounts').insert([
+      { name, balance: parseFloat(balance || '0') }
+    ])
+
+    if (!error) {
+      fetchData()
+    } else {
+      alert('خطأ في إضافة الحساب: ' + error.message)
+    }
+  }
+
+  // إضافة هدف مالي جديد
+  const handleAddGoal = async (formData: { title: string; target: string }) => {
+    const { title, target } = formData
+    if (!title || !target) return
+
+    const { error } = await supabase.from('savings_goals').insert([
+      { title, target_amount: parseFloat(target), current_amount: 0 }
+    ])
+
+    if (!error) {
+      fetchData()
+    } else {
+      alert('خطأ في إضافة الهدف: ' + error.message)
+    }
+  }
+
+  const totalBalance = accounts.reduce((acc, curr) => acc + Number(curr.balance), 0)
+
+  if (loading && accounts.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50" dir="rtl">
+        <div className="flex items-center gap-3 text-blue-600 font-medium">
+          <Loader2 className="animate-spin" size={24} />
+          <span>جاري تحميل لوحة التحكم...</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans" dir="rtl">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* الترويسة الاحترافية */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl shadow-sm border border-gray-100 gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-gray-900 tracking-tight">لوحة التحكم المالي</h1>
+            <p className="text-sm text-gray-500 mt-1">تتبع أصولك، راقب تدفقاتك النقدية، وحقق أهدافك بذكاء</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+              متصل بـ Supabase بنجاح
+            </span>
+          </div>
+        </header>
+
+        {/* شبكة الإحصائيات (Stat Cards) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard title="إجمالي الأرصدة المتاحة" value={`$${totalBalance.toLocaleString()}`} icon={<Wallet size={24} />} color="blue" />
+          <StatCard title="الحسابات المصرفية النشطة" value={`${accounts.length} حسابات`} icon={<TrendingUp size={24} />} color="emerald" />
+          <StatCard title="الأهداف الادخارية الجارية" value={`${goals.length} أهداف`} icon={<Target size={24} />} color="amber" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* شبكة النماذج للإدخال */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <TransactionForm accounts={accounts} onSubmit={handleAddTransaction} />
+          <AccountForm onSubmit={handleAddAccount} />
+          <GoalForm onSubmit={handleAddGoal} />
         </div>
-      </main>
-    </div>
-  );
+
+        {/* الجداول وقوائم العرض */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <TransactionList transactions={transactions} />
+          <GoalList goals={goals} />
+        </div>
+
+      </div>
+    </main>
+  )
 }
