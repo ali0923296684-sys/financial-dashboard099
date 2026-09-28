@@ -1,161 +1,264 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Wallet, TrendingUp, Target, Plus, CreditCard, Loader2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { Wallet, Users, PlusCircle, Trash2, ArrowRight, Film, Sparkles, Upload } from 'lucide-react'
 
-// استيراد المكونات الفرعية (سنقوم بإنشائها أو دمجها)
-import StatCard from './components/StatCard'
-import TransactionForm from './components/TransactionForm'
-import AccountForm from './components/AccountForm'
-import GoalForm from './components/GoalForm'
-import TransactionList from './components/TransactionList'
-import GoalList from './components/GoalList'
-
-export default function Dashboard() {
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [transactions, setTransactions] = useState<any[]>([])
-  const [goals, setGoals] = useState<any[]>([])
+export default function Home() {
+  const router = useRouter()
+  const [profiles, setProfiles] = useState<any[]>([])
+  const [name, setName] = useState('')
+  const [avatarData, setAvatarData] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
-  // دالة جلب البيانات باستخدام useCallback لتحسين الأداء
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true)
-      const [accRes, txRes, goalRes] = await Promise.all([
-        supabase.from('accounts').select('*'),
-        supabase.from('transactions').select('*, accounts(name)').order('created_at', { ascending: false }).limit(10),
-        supabase.from('savings_goals').select('*')
-      ])
+  // حالة التحكم في ظهور الفيديو الترحيجي من يوتيوب أولاً
+  const [showIntroVideo, setShowIntroVideo] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-      if (accRes.data) setAccounts(accRes.data)
-      if (txRes.data) setTransactions(txRes.data)
-      if (goalRes.data) setGoals(goalRes.data)
-    } catch (error) {
-      console.error('Error fetching data:', error)
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    const saved = localStorage.getItem('financial_dashboard_profiles')
+    if (saved) {
+      try {
+        setProfiles(JSON.parse(saved))
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    setLoading(false)
+
+    const hasSeenIntro = sessionStorage.getItem('has_seen_intro')
+    if (hasSeenIntro) {
+      setShowIntroVideo(false)
     }
   }, [])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
-  // إضافة معاملة جديدة بطريقة احترافية مع Optimistic Update
-  const handleAddTransaction = async (formData: { amount: string; type: string; description: string; accountId: string }) => {
-    const { amount, type, description, accountId } = formData
-    if (!amount || !accountId) return
-
-    const numAmount = parseFloat(amount)
-    const selectedAcc = accounts.find(acc => acc.id === accountId)
-    if (!selectedAcc) return
-
-    let newBalance = Number(selectedAcc.balance)
-    if (type === 'income') {
-      newBalance += numAmount
-    } else {
-      newBalance -= numAmount
-    }
-
-    // تنفيذ التحديث في قاعدة البيانات
-    const { error: txError } = await supabase.from('transactions').insert([
-      { amount: numAmount, type, description, account_id: accountId }
-    ])
-
-    if (txError) {
-      alert('خطأ في إضافة المعاملة: ' + txError.message)
-      return
-    }
-
-    await supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId)
-    fetchData()
+  const handleFinishIntro = () => {
+    setShowIntroVideo(false)
+    sessionStorage.setItem('has_seen_intro', 'true')
   }
 
-  // إضافة حساب جديد
-  const handleAddAccount = async (formData: { name: string; balance: string }) => {
-    const { name, balance } = formData
-    if (!name) return
-
-    const { error } = await supabase.from('accounts').insert([
-      { name, balance: parseFloat(balance || '0') }
-    ])
-
-    if (!error) {
-      fetchData()
-    } else {
-      alert('خطأ في إضافة الحساب: ' + error.message)
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setAvatarData(reader.result as string)
+      }
+      reader.readAsDataURL(file)
     }
   }
 
-  // إضافة هدف مالي جديد
-  const handleAddGoal = async (formData: { title: string; target: string }) => {
-    const { title, target } = formData
-    if (!title || !target) return
+  const saveProfiles = (newProfiles: any[]) => {
+    setProfiles(newProfiles)
+    localStorage.setItem('financial_dashboard_profiles', JSON.stringify(newProfiles))
+  }
 
-    const { error } = await supabase.from('savings_goals').insert([
-      { title, target_amount: parseFloat(target), current_amount: 0 }
-    ])
+  const handleAddProfile = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
 
-    if (!error) {
-      fetchData()
-    } else {
-      alert('خطأ في إضافة الهدف: ' + error.message)
+    const username = name.trim().toLowerCase().replace(/\s+/g, '_') + '_' + Math.floor(Math.random() * 1000)
+    const finalAvatar = avatarData || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+
+    const newProfile = {
+      id: Date.now(),
+      name: name.trim(),
+      username,
+      avatar_url: finalAvatar,
+      createdAt: new Date().toLocaleDateString('ar-LY')
+    }
+
+    const updated = [newProfile, ...profiles]
+    saveProfiles(updated)
+    setName('')
+    setAvatarData('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDeleteProfile = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (confirm('هل أنت متأكد من حذف هذه اللوحة والبيانات التابعة لها؟')) {
+      const filtered = profiles.filter(p => p.id !== id)
+      saveProfiles(filtered)
     }
   }
 
-  const totalBalance = accounts.reduce((acc, curr) => acc + Number(curr.balance), 0)
-
-  if (loading && accounts.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50" dir="rtl">
-        <div className="flex items-center gap-3 text-blue-600 font-medium">
-          <Loader2 className="animate-spin" size={24} />
-          <span>جاري تحميل لوحة التحكم...</span>
-        </div>
-      </div>
-    )
+  if (loading) {
+    return <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">جاري التحميل...</div>
   }
 
   return (
-    <main className="min-h-screen bg-gray-50/50 p-6 md:p-10 font-sans" dir="rtl">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <main className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950 text-white p-3 sm:p-6 md:p-8 font-sans overflow-x-hidden" dir="rtl">
+      
+      {/* 1. شاشة فيديو اليوتيوب التمهيدية (تظهر أولاً عند فتح المنظومة) */}
+      {showIntroVideo && (
+        <div className="fixed inset-0 bg-gray-950/95 backdrop-blur-xl z-50 flex items-center justify-center p-4">
+          <div className="max-w-xl w-full bg-gray-900 border border-gray-800 p-4 sm:p-6 rounded-3xl shadow-2xl space-y-4 text-center relative">
+            
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600/20 text-emerald-400 rounded-full text-xs font-bold">
+                <Sparkles size={14} />
+                <span>أهلاً بك في المنظومة المالية</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white">فيديو تعريفي من يوتيوب</h2>
+              <p className="text-xs text-gray-400">شاهد الفيديو التعريفي ثم تابع الانتقال للمنظومة.</p>
+            </div>
+
+            {/* مشغل فيديو يوتيوب الخاص بك */}
+            <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-gray-700 shadow-inner">
+              <iframe
+                className="w-full h-full"
+                src="https://www.youtube.com/embed/1WJsltfWwyc?autoplay=1&enablejsapi=1"
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              ></iframe>
+            </div>
+
+            {/* زر الدخول إلى المنظومة الرئيسية */}
+            <button
+              onClick={handleFinishIntro}
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-sm transition-all shadow-lg flex items-center justify-center gap-2"
+            >
+              <span>دخول إلى المنظومة الرئيسية</span>
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. اللوحة الرئيسية */}
+      <div className="max-w-4xl mx-auto space-y-6 sm:space-y-10">
         
-        {/* الترويسة الاحترافية */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl shadow-sm border border-gray-100 gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">لوحة التحكم المالي</h1>
-            <p className="text-sm text-gray-500 mt-1">تتبع أصولك، راقب تدفقاتك النقدية، وحقق أهدافك بذكاء</p>
+        {/* ترويسة الموقع */}
+        <div className="text-center space-y-2 py-4">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-full text-xs font-bold mb-2">
+            <Sparkles size={14} />
+            <span>نظام إدارة الأموال والفواتير الذكي</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="flex h-3 w-3 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
-              متصل بـ Supabase بنجاح
-            </span>
-          </div>
-        </header>
+          <h1 className="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-blue-500">
+            المنظومة المالية المتقدمة
+          </h1>
+          <p className="text-gray-400 text-xs sm:text-sm max-w-lg mx-auto">
+            قم بإدارة أرصدتك، ديونك، وتنزيل فواتيرك بكل سهولة وأمان عبر لوحات تحكم مخصصة.
+          </p>
 
-        {/* شبكة الإحصائيات (Stat Cards) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <StatCard title="إجمالي الأرصدة المتاحة" value={`$${totalBalance.toLocaleString()}`} icon={<Wallet size={24} />} color="blue" />
-          <StatCard title="الحسابات المصرفية النشطة" value={`${accounts.length} حسابات`} icon={<TrendingUp size={24} />} color="emerald" />
-          <StatCard title="الأهداف الادخارية الجارية" value={`${goals.length} أهداف`} icon={<Target size={24} />} color="amber" />
+          <button
+            onClick={() => setShowIntroVideo(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-xs text-emerald-400 font-bold transition-all mt-3"
+          >
+            <Film size={14} />
+            <span>إعادة مشاهدة الفيديو الدعائي (يوتيوب)</span>
+          </button>
         </div>
 
-        {/* شبكة النماذج للإدخال */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <TransactionForm accounts={accounts} onSubmit={handleAddTransaction} />
-          <AccountForm onSubmit={handleAddAccount} />
-          <GoalForm onSubmit={handleAddGoal} />
+        {/* نموذج إضافة حساب/لوحة جديدة مع رفع صورة من الهاتف */}
+        <div className="bg-gray-900/90 border border-gray-800 p-4 sm:p-6 rounded-2xl sm:rounded-3xl space-y-4 shadow-xl">
+          <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <PlusCircle size={20} className="text-emerald-400" />
+            <span>إنشاء لوحة تحكم جديدة لشخص أو مشروع</span>
+          </h3>
+
+          <form onSubmit={handleAddProfile} className="space-y-3.5">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">اسم الشخص أو المشروع</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="مثال: أحمد محمد، محل التلاجة..."
+                required
+                className="w-full px-3.5 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* خانة اختيار الصورة الشخصية من الهاتف */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">الصورة الشخصية من الهاتف (اختياري)</label>
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-700 hover:border-emerald-500 bg-gray-800/40 p-3 rounded-xl flex items-center justify-center gap-3 cursor-pointer transition-all"
+              >
+                {avatarData ? (
+                  <div className="flex items-center gap-2">
+                    <img src={avatarData} alt="Preview" className="w-9 h-9 rounded-lg object-cover border border-emerald-500" />
+                    <span className="text-xs text-emerald-400 font-bold">تم اختيار الصورة بنجاح (اضغط للتغيير)</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Upload size={18} className="text-emerald-400" />
+                    <span className="text-xs">اضغط لاختيار صورة شخصية من المعرض أو التقاطها بالكاميرا</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-all shadow-lg"
+            >
+              إنشاء اللوحة والدخول
+            </button>
+          </form>
         </div>
 
-        {/* الجداول وقوائم العرض */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <TransactionList transactions={transactions} />
-          <GoalList goals={goals} />
+        {/* قائمة اللوحات المتاحة */}
+        <div className="bg-gray-900/90 border border-gray-800 p-4 sm:p-6 rounded-2xl sm:rounded-3xl space-y-4 shadow-xl">
+          <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <Users size={20} className="text-blue-400" />
+            <span>اللوحات والحسابات المسجلة ({profiles.length})</span>
+          </h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {profiles.length === 0 ? (
+              <p className="text-gray-500 text-xs sm:text-sm text-center py-6 sm:col-span-2">
+                لا توجد لوحات مسجلة بعد. قم بإنشاء أول لوحة من النموذج أعلاه.
+              </p>
+            ) : (
+              profiles.map((profile) => (
+                <div
+                  key={profile.id}
+                  onClick={() => router.push(`/${profile.username}`)}
+                  className="flex items-center justify-between bg-gray-800/50 hover:bg-gray-800 border border-gray-700/60 hover:border-emerald-500/50 p-3.5 rounded-xl cursor-pointer transition-all group"
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.name}
+                      className="w-11 h-11 rounded-xl object-cover border border-emerald-500 shrink-0 bg-gray-700"
+                    />
+                    <div className="overflow-hidden">
+                      <h4 className="font-bold text-xs sm:text-sm text-white truncate group-hover:text-emerald-400 transition-colors">
+                        {profile.name}
+                      </h4>
+                      <span className="text-[11px] text-gray-400 block font-mono">@{profile.username}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={(e) => handleDeleteProfile(profile.id, e)}
+                      className="p-2 text-gray-500 hover:text-rose-400 transition-colors rounded-lg hover:bg-gray-700/50"
+                      title="حذف اللوحة"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                    <div className="p-2 bg-gray-700/50 group-hover:bg-emerald-600 text-gray-300 group-hover:text-white rounded-lg transition-all">
+                      <ArrowRight size={16} />
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
       </div>

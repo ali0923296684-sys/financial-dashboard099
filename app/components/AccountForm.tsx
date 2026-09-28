@@ -1,49 +1,68 @@
 'use client'
-import { useState } from 'react'
-import { CreditCard } from 'lucide-react'
 
-export default function AccountForm({ onSubmit }: { onSubmit: (data: any) => void }) {
+import React, { useState } from 'react'
+import { PlusCircle, Wallet } from 'lucide-react'
+
+export default function AccountForm({ onSubmit }: { onSubmit: (data: { name: string; balance: string }) => void }) {
   const [name, setName] = useState('')
   const [balance, setBalance] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit({ name, balance })
-    setName('')
-    setBalance('')
+    if (!name.trim()) return
+
+    setLoading(true)
+    try {
+      await onSubmit({ name, balance: balance || '0' })
+      setName('')
+      setBalance('')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between">
-      <div>
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-          <CreditCard size={20} className="text-emerald-600" /> إضافة حساب / محفظة
-        </h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">اسم الحساب</label>
-            <input 
-              type="text" placeholder="مثال: البنك التجاري، كاش" value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-              required
-            />
-          </div>
+    <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+        <Wallet className="text-emerald-600" size={20} />
+        إضافة حساب جديد
+      </h3>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">الرصيد الابتدائي</label>
-            <input 
-              type="number" step="0.01" placeholder="0.00" value={balance}
-              onChange={(e) => setBalance(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-            />
-          </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">اسم الحساب أو المحفظة</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="مثال: محفظة الكاش، حساب البنك التجاري..."
+            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 text-gray-800"
+            required
+          />
+        </div>
 
-          <button type="submit" className="w-full bg-emerald-600 text-white p-3.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/20 mt-6">
-            إنشاء الحساب
-          </button>
-        </form>
-      </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">الرصيد الابتدائي ($)</label>
+          <input
+            type="number"
+            step="any"
+            value={balance}
+            onChange={(e) => setBalance(e.target.value)}
+            placeholder="0.00"
+            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 text-gray-800"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 text-sm"
+        >
+          <PlusCircle size={18} />
+          <span>{loading ? 'جاري الإضافة...' : 'حفظ وإضافة الحساب'}</span>
+        </button>
+      </form>
     </div>
   )
 }

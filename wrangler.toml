@@ -1,3 +1,12 @@
 name = "financial-dashboard"
-pages_build_output_dir = ".vercel/output/static"
-compatibility_date = "2026-09-26"
+compatibility_date = "2026-09-27"
+
+[site]
+bucket = "./out"
+```[cite: 1]
+
+### الخطوة الحاسمة الآن:
+1. اذهب إلى إعدادات المشروع في Cloudflare Pages.
+2. في خانة **Deploy command**، قم **بمسح** الأمر القديم (`npx wrangler pages deploy out`) واكتب بدلاً منه تماماً:
+   ```bash
+   npx wrangler pages deploy
